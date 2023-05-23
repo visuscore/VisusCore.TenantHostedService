@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.git*;node_modules\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="OrchardCore.Admin.Abstractions" Version="1.5.0" />
+    <PackageReference Include="OrchardCore.DisplayManagement" Version="1.5.0" />
+    <PackageReference Include="OrchardCore.Infrastructure.Abstractions" Version="1.5.0" />
+    <PackageReference Include="OrchardCore.Module.Targets" Version="1.5.0" />
+    <PackageReference Include="OrchardCore.Navigation.Core" Version="1.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VisusCore.TenantHostedService.Core\VisusCore.TenantHostedService.Core.csproj" />
+  </ItemGroup>
+
+</Project>
