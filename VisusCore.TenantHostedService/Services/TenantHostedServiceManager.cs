@@ -28,7 +28,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IShellHost _shellHost;
     private readonly ILogger<TenantHostedServiceManager> _logger;
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus>> _startedServices = new();
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus>> _loadedServices = new();
 
     public TenantHostedServiceManager(
         IHttpContextAccessor httpContextAccessor,
@@ -61,29 +61,37 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
 
         foreach (var shellContext in GetShellContexts())
         {
-            await StopHostedServicesInShellContextAsync(shellContext);
+            var shellStartedServices = _loadedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
+            await UnloadHostedServicesAsync(
+                shellContext,
+                shellStartedServices,
+                shellStartedServices.Keys,
+                CancellationToken.None);
         }
     }
 
     private Task StartHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken = default) =>
         UsingLockedInScopeAsync(shellContext, async scope =>
         {
+            var shellLoadedServices = _loadedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
             var shellFeaturesManager = scope.ServiceProvider.GetRequiredService<IShellFeaturesManager>();
             if (!(await shellFeaturesManager.GetEnabledFeaturesAsync()).Any(feature => feature.Id == FeatureIds.Loader))
             {
+                await UnloadHostedServicesAsync(shellContext, shellLoadedServices, shellLoadedServices.Keys, stoppingToken);
+
                 return;
             }
 
             await SetHttpAccessorBaseUrlInScopeAsync(scope);
 
             var hostedServices = scope.ServiceProvider.GetServices<ITenantHostedService>();
-            var shellStartedServices = _startedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
 
             foreach (var hostedService in hostedServices)
             {
-                var serviceStatus = shellStartedServices.GetOrAdd(
+                var serviceStatus = shellLoadedServices.GetOrAdd(
                     hostedService,
                     hostedService => new() { ImplementationType = hostedService.GetType() });
+
                 if (serviceStatus.IsStarted || serviceStatus.HasError)
                 {
                     continue;
@@ -99,39 +107,62 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
                     SetErrorStatus(serviceStatus, exception);
                     _logger.LogError(
                         exception,
-                        "Error while starting the hosted service in the tenant '{TenantName}'.",
+                        "Error while starting the hosted service on tenant '{TenantName}'.",
                         shellContext.Settings.Name);
                 }
             }
+
+            var servicesToStop = shellLoadedServices.Keys.Where(loadedService => !hostedServices.Contains(loadedService))
+                .ToList();
+            if (servicesToStop.Any())
+            {
+                await UnloadHostedServicesAsync(shellContext, shellLoadedServices, servicesToStop, stoppingToken);
+            }
         });
 
-    private Task StopHostedServicesInShellContextAsync(ShellContext shellContext) =>
-        UsingLockedInScopeAsync(shellContext, async scope =>
+    private async Task UnloadHostedServicesAsync(
+        ShellContext shellContext,
+        ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus> shellLoadedServices,
+        IEnumerable<ITenantHostedService> servicesToStop,
+        CancellationToken stoppingToken)
+    {
+        foreach (var hostedService in servicesToStop)
         {
-            var shellStartedServices = _startedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
-            foreach (var hostedService in shellStartedServices.Keys)
+            var serviceStatus = shellLoadedServices[hostedService];
+            if (serviceStatus.IsStarted)
             {
-                var serviceStatus = shellStartedServices[hostedService];
-                if (!serviceStatus.IsStarted || serviceStatus.HasError)
-                {
-                    continue;
-                }
-
                 try
                 {
-                    await hostedService.StopAsync(CancellationToken.None);
+                    await hostedService.StopAsync(stoppingToken);
                     SetSuccessStatus(serviceStatus, isStarted: false);
                 }
                 catch (Exception exception) when (!exception.IsFatal())
                 {
-                    SetErrorStatus(serviceStatus, exception);
                     _logger.LogError(
                         exception,
-                        "Error while stopping the hosted service in the tenant '{TenantName}'.",
+                        "Error while stopping the hosted service on tenant '{TenantName}'.",
                         shellContext.Settings.Name);
                 }
             }
-        });
+
+            if (hostedService is IDisposable disposable)
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception exception) when (!exception.IsFatal())
+                {
+                    _logger.LogError(
+                        exception,
+                        "Error while disposing the hosted service on tenant '{TenantName}'.",
+                        shellContext.Settings.Name);
+                }
+            }
+
+            shellLoadedServices.TryRemove(hostedService, out _);
+        }
+    }
 
     private IEnumerable<ShellContext> GetShellContexts() =>
         _shellHost.ListShellContexts()
@@ -176,7 +207,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     }
 
     private ITenantHostedService GetLoadedServiceByType(string shellName, Type implementationType) =>
-        _startedServices.GetValueOrDefault(shellName)
+        _loadedServices.GetValueOrDefault(shellName)
             ?.Keys
             ?.FirstOrDefault(hostedService => hostedService.GetType() == implementationType);
 
@@ -184,7 +215,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     {
         var hostedService = GetLoadedServiceByType(shellName, implementationType)
             ?? throw new ArgumentException($"The hosted service of type '{implementationType.FullName}' is not loaded.");
-        var serviceStatus = _startedServices[shellName][hostedService];
+        var serviceStatus = _loadedServices[shellName][hostedService];
         if (start && serviceStatus.IsStarted)
         {
             throw new InvalidOperationException($"The hosted service of type '{implementationType.FullName}' is already running.");
@@ -232,7 +263,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     #region ITenantHostedServiceManager implementations
 
     IEnumerable<ITenantHostedServiceStatus> ITenantHostedServiceManager.GetLoadedServices() =>
-        _startedServices.GetValueOrDefault(ShellScope.Current.ShellContext.Settings.Name)
+        _loadedServices.GetValueOrDefault(ShellScope.Current.ShellContext.Settings.Name)
             ?.Values
             ?.ToList()
             ?? Enumerable.Empty<ITenantHostedServiceStatus>();
@@ -242,6 +273,9 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
 
     Task ITenantHostedServiceManager.StopServiceAsync(Type implementationType) =>
         StartOrStopServiceByTypeAsync(ShellScope.Current.ShellContext.Settings.Name, implementationType, start: false);
+
+    Task ITenantHostedServiceManager.UpdateServicesAsync() =>
+        StartHostedServicesInShellContextAsync(ShellScope.Current.ShellContext);
 
     #endregion
 }

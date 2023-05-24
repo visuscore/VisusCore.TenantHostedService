@@ -24,4 +24,9 @@ public interface ITenantHostedServiceManager
     /// Stops a service given by the <paramref name="implementationType"/>.
     /// </summary>
     Task StartServiceAsync(Type implementationType);
+
+    /// <summary>
+    /// Synchronize the loaded services with the dependency container.
+    /// </summary>
+    Task UpdateServicesAsync();
 }

@@ -10,6 +10,12 @@ using VisusCore.TenantHostedService.Constants;
 )]
 
 [assembly: Feature(
+    Id = FeatureIds.Host,
+    Name = "Tenant Hosted Service Host",
+    Category = "Infrastructure"
+)]
+
+[assembly: Feature(
     Id = FeatureIds.Loader,
     Name = "Tenant Hosted Service Loader",
     Category = "Infrastructure"
