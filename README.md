@@ -6,7 +6,7 @@ Orchard Core module that allows tenants to host their own services similar to [B
 
 ## Usage
 
-To incorporate the tenant hosted service infrastructure into Orchard Core, simply utilize `OrchardCoreBuilderExtensions.AddTenantHostedService`.
+To integrate the tenant hosted service infrastructure into Orchard Core, you can invoke the `OrchardCoreBuilderExtensions.AddTenantHostedService` method. This method adds the necessary configurations and components to enable the management and execution of hosted services specific to each tenant within the Orchard Core framework.
 
 ```diff
 using Microsoft.AspNetCore.Builder;
