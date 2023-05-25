@@ -23,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Libraries\VisusCore.AidStack\VisusCore.AidStack\VisusCore.AidStack.csproj" />
     <ProjectReference Include="..\VisusCore.TenantHostedService.Core\VisusCore.TenantHostedService.Core.csproj" />
   </ItemGroup>
 

@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using VisusCore.AidStack.Extensions;
 using VisusCore.TenantHostedService.Abstractions.Models;
 using VisusCore.TenantHostedService.Abstractions.Services;
 using VisusCore.TenantHostedService.Constants;

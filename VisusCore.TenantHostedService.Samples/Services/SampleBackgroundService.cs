@@ -3,6 +3,7 @@ using OrchardCore.Environment.Shell;
 using OrchardCore.Settings;
 using System.Threading;
 using System.Threading.Tasks;
+using VisusCore.AidStack.Extensions;
 using VisusCore.TenantHostedService.Core.Services;
 
 namespace VisusCore.TenantHostedService.Samples.Services;
@@ -31,14 +32,7 @@ public class SampleBackgroundService : TenantBackgroundService
             _shellSettings.Name,
             site.SiteName);
 
-        try
-        {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-        }
-        catch (TaskCanceledException)
-        {
-            // This happens when the service is stopped. Nothing to do here.
-        }
+        await stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
 
         _logger.LogInformation(
             "Sample background service stopped on tenant '{TenantName}' for site '{SiteName}'.",
