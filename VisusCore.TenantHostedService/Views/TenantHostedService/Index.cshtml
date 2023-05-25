@@ -1,0 +1,36 @@
+@using VisusCore.TenantHostedService.ViewModels
+@model TenantHostedServiceIndexViewModel
+
+<zone Name="Title"><h1>@RenderTitleSegments(T["Tenant Hosted Services"])</h1></zone>
+
+<form asp-action="Index">
+    @if (Model.Services.Any())
+    {
+        <ul class="list-group">
+            @foreach (var service in Model.Services)
+            {
+                <li class="list-group-item">
+                    <div class="w-100">
+                        <div class="float-end">
+                            @if (service.IsStarted)
+                            {
+                                <a asp-action="Stop" asp-route-typeName="@service.TypeName" class="btn btn-danger btn-sm" data-url-af="UnsafeUrl">@T["Stop"]</a>
+                            }
+                            else
+                            {
+                                <a asp-action="Start" asp-route-typeName="@service.TypeName" class="btn btn-success btn-sm" data-url-af="UnsafeUrl">@T["Start"]</a>
+                            }
+                        </div>
+                        <span class="hint">@service.TypeName</span>
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+    else
+    {
+        <div class="alert alert-info mb-0" role="alert">
+            @T["<strong>Nothing here!</strong> There are no tenant hosted service for the moment."]
+        </div>
+    }
+</form>
