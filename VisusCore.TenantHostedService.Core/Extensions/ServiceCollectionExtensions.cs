@@ -24,4 +24,22 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddScopedTenantHostedService<TTenantHostedService>(this IServiceCollection services)
+        where TTenantHostedService : class, IScopedTenantHostedService
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IScopedTenantHostedService, TTenantHostedService>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddScopedTenantHostedService<THostedService>(
+        this IServiceCollection services,
+        Func<IServiceProvider, THostedService> implementationFactory)
+        where THostedService : class, IScopedTenantHostedService
+    {
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IScopedTenantHostedService>(implementationFactory));
+
+        return services;
+    }
 }

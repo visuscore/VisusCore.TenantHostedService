@@ -29,7 +29,12 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IShellHost _shellHost;
     private readonly ILogger<TenantHostedServiceManager> _logger;
-    private readonly ConcurrentDictionary<string, ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus>> _loadedServices = new();
+    private readonly ConcurrentDictionary<
+        string,
+        ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus>> _loadedServices = new();
+    private readonly ConcurrentDictionary<
+        string,
+        ConcurrentDictionary<IScopedTenantHostedService, TenantHostedServiceStatus>> _loadedScopedServices = new();
 
     public TenantHostedServiceManager(
         IHttpContextAccessor httpContextAccessor,
@@ -53,9 +58,12 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
             }
         }
 
+        var scopedTasks = new List<Task>();
         foreach (var shellContext in GetShellContexts())
         {
             await StartHostedServicesInShellContextAsync(shellContext, stoppingToken);
+
+            scopedTasks.Add(StartScopedHostedServicesInShellContextAsync(shellContext, stoppingToken));
         }
 
         await stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
@@ -71,61 +79,69 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         }
     }
 
+    private Task StartScopedHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken = default) =>
+        shellContext.CreateScope().UsingAsync(scope =>
+            StartHostedServicesInShellScopeAsync(
+                shellContext,
+                scope,
+                _loadedScopedServices,
+                () => Task.CompletedTask,
+                stoppingToken));
+
     private Task StartHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken = default) =>
-        UsingLockedInScopeAsync(shellContext, async scope =>
-        {
-            var shellLoadedServices = _loadedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
-            var shellFeaturesManager = scope.ServiceProvider.GetRequiredService<IShellFeaturesManager>();
-            if (!(await shellFeaturesManager.GetEnabledFeaturesAsync()).Any(feature => feature.Id == FeatureIds.Loader))
-            {
-                await UnloadHostedServicesAsync(shellContext, shellLoadedServices, shellLoadedServices.Keys, stoppingToken);
+        UsingLockedInScopeAsync(shellContext, scope =>
+            StartHostedServicesInShellScopeAsync(
+                shellContext,
+                scope,
+                _loadedServices,
+                afterAsync: null,
+                stoppingToken));
 
-                return;
-            }
-
-            await SetHttpAccessorBaseUrlInScopeAsync(scope);
-
-            var hostedServices = scope.ServiceProvider.GetServices<ITenantHostedService>();
-
-            foreach (var hostedService in hostedServices)
-            {
-                var serviceStatus = shellLoadedServices.GetOrAdd(
-                    hostedService,
-                    hostedService => new() { ImplementationType = hostedService.GetType() });
-
-                if (serviceStatus.IsStarted || serviceStatus.HasError)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    await hostedService.StartAsync(stoppingToken);
-                    SetSuccessStatus(serviceStatus, isStarted: true);
-                }
-                catch (Exception exception) when (!exception.IsFatal())
-                {
-                    SetErrorStatus(serviceStatus, exception);
-                    _logger.LogError(
-                        exception,
-                        "Error while starting the hosted service on tenant '{TenantName}'.",
-                        shellContext.Settings.Name);
-                }
-            }
-
-            var servicesToStop = shellLoadedServices.Keys.Where(loadedService => !hostedServices.Contains(loadedService))
-                .ToList();
-            if (servicesToStop.Any())
-            {
-                await UnloadHostedServicesAsync(shellContext, shellLoadedServices, servicesToStop, stoppingToken);
-            }
-        });
-
-    private async Task UnloadHostedServicesAsync(
+    private async Task StartHostedServicesInShellScopeAsync<THostedService>(
         ShellContext shellContext,
-        ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus> shellLoadedServices,
-        IEnumerable<ITenantHostedService> servicesToStop,
+        ShellScope scope,
+        ConcurrentDictionary<string, ConcurrentDictionary<THostedService, TenantHostedServiceStatus>> loadedServices,
+        Func<Task> afterAsync = null,
+        CancellationToken cancellationToken = default)
+        where THostedService : IHostedService
+    {
+        var shellLoadedServices = loadedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
+        var shellFeaturesManager = scope.ServiceProvider.GetRequiredService<IShellFeaturesManager>();
+        if (!(await shellFeaturesManager.GetEnabledFeaturesAsync()).Any(feature => feature.Id == FeatureIds.Loader))
+        {
+            await UnloadHostedServicesAsync(shellContext, shellLoadedServices, shellLoadedServices.Keys, cancellationToken);
+
+            return;
+        }
+
+        await SetHttpAccessorBaseUrlInScopeAsync(scope);
+
+        var hostedServices = scope.ServiceProvider.GetServices<THostedService>();
+
+        foreach (var hostedService in hostedServices)
+        {
+            await StartHostedServiceAsync(hostedService, shellLoadedServices, shellContext.Settings.Name, cancellationToken);
+        }
+
+        var servicesToStop = shellLoadedServices.Keys.Where(loadedService => !hostedServices.Contains(loadedService))
+            .ToList();
+        if (servicesToStop.Any())
+        {
+            await UnloadHostedServicesAsync(shellContext, shellLoadedServices, servicesToStop, cancellationToken);
+        }
+
+        if (afterAsync is not null)
+        {
+            await afterAsync();
+        }
+    }
+
+    private async Task UnloadHostedServicesAsync<THostedService>(
+        ShellContext shellContext,
+        ConcurrentDictionary<THostedService, TenantHostedServiceStatus> shellLoadedServices,
+        IEnumerable<THostedService> servicesToStop,
         CancellationToken stoppingToken)
+        where THostedService : IHostedService
     {
         foreach (var hostedService in servicesToStop)
         {
@@ -162,6 +178,37 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
             }
 
             shellLoadedServices.TryRemove(hostedService, out _);
+        }
+    }
+
+    private async Task StartHostedServiceAsync<THostedService>(
+        THostedService hostedService,
+        ConcurrentDictionary<THostedService, TenantHostedServiceStatus> loadedServices,
+        string tenantName,
+        CancellationToken stoppingToken = default)
+        where THostedService : IHostedService
+    {
+        var serviceStatus = loadedServices.GetOrAdd(
+            hostedService,
+            hostedService => new() { ImplementationType = hostedService.GetType() });
+
+        if (serviceStatus.IsStarted || serviceStatus.HasError)
+        {
+            return;
+        }
+
+        try
+        {
+            await hostedService.StartAsync(stoppingToken);
+            SetSuccessStatus(serviceStatus, isStarted: true);
+        }
+        catch (Exception exception) when (!exception.IsFatal())
+        {
+            SetErrorStatus(serviceStatus, exception);
+            _logger.LogError(
+                exception,
+                "Error while starting the hosted service on tenant '{TenantName}'.",
+                tenantName);
         }
     }
 
@@ -276,7 +323,9 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         StartOrStopServiceByTypeAsync(ShellScope.Current.ShellContext.Settings.Name, implementationType, start: false);
 
     Task ITenantHostedServiceManager.UpdateServicesAsync() =>
-        StartHostedServicesInShellContextAsync(ShellScope.Current.ShellContext);
+        StartHostedServicesInShellContextAsync(
+            ShellScope.Current.ShellContext,
+            _httpContextAccessor.HttpContext.RequestAborted);
 
     #endregion
 }
