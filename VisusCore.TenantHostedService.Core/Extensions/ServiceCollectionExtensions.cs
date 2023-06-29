@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddScopedTenantHostedService<TTenantHostedService>(this IServiceCollection services)
+    public static IServiceCollection AddTenantHostedScopedService<TTenantHostedService>(this IServiceCollection services)
         where TTenantHostedService : class, ITenantHostedScopedService
     {
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantHostedScopedService, TTenantHostedService>());
@@ -33,7 +33,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddScopedTenantHostedService<THostedService>(
+    public static IServiceCollection AddTenantHostedScopedService<THostedService>(
         this IServiceCollection services,
         Func<IServiceProvider, THostedService> implementationFactory)
         where THostedService : class, ITenantHostedScopedService
