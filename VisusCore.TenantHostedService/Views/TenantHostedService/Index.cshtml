@@ -11,17 +11,43 @@
             {
                 <li class="list-group-item">
                     <div class="w-100">
-                        <div class="float-end">
-                            @if (service.IsStarted)
+                        <span class="hint">
+                            @if (service.HasError)
                             {
-                                <a asp-action="Stop" asp-route-typeName="@service.TypeName" class="btn btn-danger btn-sm" data-url-af="UnsafeUrl">@T["Stop"]</a>
+                                @T["Error"]
+                            }
+                            else if (service.IsStarted && !service.IsCompleted)
+                            {
+                                @T["Running"]
+                            }
+                            else if (service.IsCompleted)
+                            {
+                                @T["Completed"]
                             }
                             else
                             {
-                                <a asp-action="Start" asp-route-typeName="@service.TypeName" class="btn btn-success btn-sm" data-url-af="UnsafeUrl">@T["Start"]</a>
+                                @T["Stopped"]
                             }
-                        </div>
+                        </span>
+
+                        @if (!service.IsScoped)
+                        {
+                            <div class="float-end">
+                                @if (service.IsStarted)
+                                {
+                                    <a asp-action="Stop" asp-route-typeName="@service.TypeName" class="btn btn-danger btn-sm" data-url-af="UnsafeUrl">@T["Stop"]</a>
+                                }
+                                else
+                                {
+                                    <a asp-action="Start" asp-route-typeName="@service.TypeName" class="btn btn-success btn-sm" data-url-af="UnsafeUrl">@T["Start"]</a>
+                                }
+                            </div>
+                        }
                         <span class="hint">@service.TypeName</span>
+                        @if (service.IsScoped)
+                        {
+                            <span class="hint"> - @T["Scoped"]</span>
+                        }
                     </div>
                 </li>
             }
