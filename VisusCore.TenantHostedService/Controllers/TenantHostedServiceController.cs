@@ -40,7 +40,9 @@ public class TenantHostedServiceController : Controller
                 .Select(service => new TenantHostedServiceItemViewModel
                 {
                     HasError = service.HasError,
+                    IsScoped = service.IsScoped,
                     IsStarted = service.IsStarted,
+                    IsCompleted = service.IsCompleted,
                     TypeName = service.ImplementationType.FullName,
                 }),
         });

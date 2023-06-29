@@ -13,15 +13,18 @@ public class SampleScopedBackgroundService : ScopedTenantBackgroundService
 {
     private readonly ShellSettings _shellSettings;
     private readonly ISiteService _siteService;
+    private readonly ISampleScopedService _sampleScopedService;
     private readonly ILogger<SampleScopedBackgroundService> _logger;
 
     public SampleScopedBackgroundService(
         ShellSettings shellSettings,
         ISiteService siteService,
+        ISampleScopedService sampleScopedService,
         ILogger<SampleScopedBackgroundService> logger)
     {
         _shellSettings = shellSettings;
         _siteService = siteService;
+        _sampleScopedService = sampleScopedService;
         _logger = logger;
     }
 
@@ -39,6 +42,8 @@ public class SampleScopedBackgroundService : ScopedTenantBackgroundService
                 "Sample scoped background service activity on tenant '{TenantName}' for site '{SiteName}'.",
                 _shellSettings.Name,
                 site.SiteName);
+
+            await _sampleScopedService.DoSomethingAsync(stoppingToken);
         }
 
         _logger.LogInformation(

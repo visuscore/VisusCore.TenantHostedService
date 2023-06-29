@@ -13,9 +13,19 @@ public interface ITenantHostedServiceStatus
     Type ImplementationType { get; }
 
     /// <summary>
+    /// Gets a value indicating whether if the hosted service is scoped.
+    /// </summary>
+    bool IsScoped { get; }
+
+    /// <summary>
     /// Gets a value indicating whether if the hosted service is started.
     /// </summary>
     bool IsStarted { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether if the hosted service is completed.
+    /// </summary>
+    bool IsCompleted { get; }
 
     /// <summary>
     /// Gets a value indicating whether if the hosted service has an error.

@@ -6,7 +6,7 @@ namespace VisusCore.TenantHostedService.Abstractions.Services;
 /// <summary>
 /// Interface for hosted services running on tenant level in a service scope.
 /// </summary>
-public interface IScopedTenantHostedService : IHostedService
+public interface ITenantHostedScopedService : IHostedService
 {
     /// <summary>
     /// Gets the Task that executes the background operation.

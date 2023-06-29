@@ -34,7 +34,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         ConcurrentDictionary<ITenantHostedService, TenantHostedServiceStatus>> _loadedServices = new();
     private readonly ConcurrentDictionary<
         string,
-        ConcurrentDictionary<IScopedTenantHostedService, TenantHostedServiceStatus>> _loadedScopedServices = new();
+        ConcurrentDictionary<ITenantHostedScopedService, TenantHostedServiceStatus>> _loadedScopedServices = new();
 
     public TenantHostedServiceManager(
         IHttpContextAccessor httpContextAccessor,
@@ -66,6 +66,10 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
             scopedTasks.Add(StartScopedHostedServicesInShellContextAsync(shellContext, stoppingToken));
         }
 
+        var stoppingTask = stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
+
+        await WaitTasksToBeCompletedOrStopAsync(scopedTasks, stoppingTask);
+
         await stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
 
         foreach (var shellContext in GetShellContexts())
@@ -76,19 +80,49 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
                 shellStartedServices,
                 shellStartedServices.Keys,
                 CancellationToken.None);
+
+            var shellStartedScopedServices = _loadedScopedServices.GetOrAdd(shellContext.Settings.Name, _ => new());
+            await UnloadHostedServicesAsync(
+                shellContext,
+                shellStartedScopedServices,
+                shellStartedScopedServices.Keys,
+                CancellationToken.None);
         }
     }
 
-    private Task StartScopedHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken = default) =>
-        shellContext.CreateScope().UsingAsync(scope =>
+    private async Task StartScopedHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken) =>
+        await (await _shellHost.GetScopeAsync(shellContext.Settings)).UsingAsync(scope =>
             StartHostedServicesInShellScopeAsync(
                 shellContext,
                 scope,
                 _loadedScopedServices,
-                () => Task.CompletedTask,
+                // Here we should wait for the services to stop or for the stoppingToken to be triggered.
+                async (shellLoadedServices) =>
+                {
+                    var stoppingTask = stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
+                    var serviceTasks = default(List<Task>);
+
+                    do
+                    {
+                        serviceTasks = shellLoadedServices
+                            .Where(shellLoadedService =>
+                                shellLoadedService.Value.IsStarted)
+                            .Select(shellLoadedService => shellLoadedService.Key.ExecuteTask)
+                            .Where(task => task is not null && !task.IsCompleted)
+                            .ToList();
+                        if (serviceTasks.Any())
+                        {
+                            await WaitScopedHostedServiceTasksToBeCompletedOrStopAsync(
+                                shellLoadedServices,
+                                serviceTasks,
+                                stoppingTask);
+                        }
+                    }
+                    while (!stoppingTask.IsCompleted && serviceTasks.Any());
+                },
                 stoppingToken));
 
-    private Task StartHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken = default) =>
+    private Task StartHostedServicesInShellContextAsync(ShellContext shellContext, CancellationToken stoppingToken) =>
         UsingLockedInScopeAsync(shellContext, scope =>
             StartHostedServicesInShellScopeAsync(
                 shellContext,
@@ -101,7 +135,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         ShellContext shellContext,
         ShellScope scope,
         ConcurrentDictionary<string, ConcurrentDictionary<THostedService, TenantHostedServiceStatus>> loadedServices,
-        Func<Task> afterAsync = null,
+        Func<ConcurrentDictionary<THostedService, TenantHostedServiceStatus>, Task> afterAsync = null,
         CancellationToken cancellationToken = default)
         where THostedService : IHostedService
     {
@@ -132,7 +166,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
 
         if (afterAsync is not null)
         {
-            await afterAsync();
+            await afterAsync(shellLoadedServices);
         }
     }
 
@@ -190,7 +224,11 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     {
         var serviceStatus = loadedServices.GetOrAdd(
             hostedService,
-            hostedService => new() { ImplementationType = hostedService.GetType() });
+            hostedService => new()
+            {
+                IsScoped = hostedService is ITenantHostedScopedService,
+                ImplementationType = hostedService.GetType(),
+            });
 
         if (serviceStatus.IsStarted || serviceStatus.HasError)
         {
@@ -295,6 +333,35 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         }
     }
 
+    private static async Task WaitTasksToBeCompletedOrStopAsync(IList<Task> tasks, Task stoppingTask)
+    {
+        do
+        {
+            await Task.WhenAny(tasks.Concat(new[] { stoppingTask }));
+        }
+        while (!stoppingTask.IsCompleted && tasks.Any(task => !task.IsCompleted));
+    }
+
+    private static async Task WaitScopedHostedServiceTasksToBeCompletedOrStopAsync(
+        ConcurrentDictionary<ITenantHostedScopedService, TenantHostedServiceStatus> shellLoadedServices,
+        IEnumerable<Task> serviceTasks,
+        Task stoppingTask)
+    {
+        var completedTask = await Task.WhenAny(serviceTasks.Concat(new[] { stoppingTask }));
+        var loadedService = shellLoadedServices.Keys.FirstOrDefault(key => key.ExecuteTask == completedTask);
+        if (loadedService is not null)
+        {
+            if (completedTask.IsFaulted)
+            {
+                SetErrorStatus(shellLoadedServices[loadedService], completedTask.Exception);
+            }
+            else
+            {
+                shellLoadedServices[loadedService].IsCompleted = !stoppingTask.IsCompleted;
+            }
+        }
+    }
+
     private static void SetSuccessStatus(TenantHostedServiceStatus status, bool isStarted)
     {
         status.IsStarted = isStarted;
@@ -311,10 +378,14 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
     #region ITenantHostedServiceManager implementations
 
     IEnumerable<ITenantHostedServiceStatus> ITenantHostedServiceManager.GetLoadedServices() =>
-        _loadedServices.GetValueOrDefault(ShellScope.Current.ShellContext.Settings.Name)
+        (_loadedServices.GetValueOrDefault(ShellScope.Current.ShellContext.Settings.Name)
             ?.Values
             ?.ToList()
-            ?? Enumerable.Empty<ITenantHostedServiceStatus>();
+            ?? Enumerable.Empty<ITenantHostedServiceStatus>())
+        .Concat(_loadedScopedServices.GetValueOrDefault(ShellScope.Current.ShellContext.Settings.Name)
+            ?.Values
+            ?.ToList()
+            ?? Enumerable.Empty<ITenantHostedServiceStatus>());
 
     Task ITenantHostedServiceManager.StartServiceAsync(Type implementationType) =>
         StartOrStopServiceByTypeAsync(ShellScope.Current.ShellContext.Settings.Name, implementationType, start: true);

@@ -8,6 +8,8 @@ namespace VisusCore.TenantHostedService.Samples;
 public class Startup : StartupBase
 {
     public override void ConfigureServices(IServiceCollection services) =>
-        services.AddTenantHostedService<SampleBackgroundService>()
-            .AddScopedTenantHostedService<SampleScopedBackgroundService>();
+        services
+            .AddTenantHostedService<SampleBackgroundService>()
+            .AddScopedTenantHostedService<SampleScopedBackgroundService>()
+            .AddScoped<ISampleScopedService, SampleScopedService>();
 }

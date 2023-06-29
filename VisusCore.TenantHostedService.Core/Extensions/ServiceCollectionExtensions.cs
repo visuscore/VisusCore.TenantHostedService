@@ -26,9 +26,9 @@ public static class ServiceCollectionExtensions
     }
 
     public static IServiceCollection AddScopedTenantHostedService<TTenantHostedService>(this IServiceCollection services)
-        where TTenantHostedService : class, IScopedTenantHostedService
+        where TTenantHostedService : class, ITenantHostedScopedService
     {
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IScopedTenantHostedService, TTenantHostedService>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantHostedScopedService, TTenantHostedService>());
 
         return services;
     }
@@ -36,9 +36,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddScopedTenantHostedService<THostedService>(
         this IServiceCollection services,
         Func<IServiceProvider, THostedService> implementationFactory)
-        where THostedService : class, IScopedTenantHostedService
+        where THostedService : class, ITenantHostedScopedService
     {
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IScopedTenantHostedService>(implementationFactory));
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantHostedScopedService>(implementationFactory));
 
         return services;
     }
