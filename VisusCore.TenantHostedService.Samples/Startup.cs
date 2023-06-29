@@ -10,6 +10,6 @@ public class Startup : StartupBase
     public override void ConfigureServices(IServiceCollection services) =>
         services
             .AddTenantHostedService<SampleBackgroundService>()
-            .AddScopedTenantHostedService<SampleScopedBackgroundService>()
+            .AddScopedTenantHostedService<SampleBackgroundScopedService>()
             .AddScoped<ISampleScopedService, SampleScopedService>();
 }

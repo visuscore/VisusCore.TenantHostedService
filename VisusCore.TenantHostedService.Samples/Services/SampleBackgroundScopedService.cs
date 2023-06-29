@@ -9,18 +9,18 @@ using VisusCore.TenantHostedService.Core.Services;
 
 namespace VisusCore.TenantHostedService.Samples.Services;
 
-public class SampleScopedBackgroundService : ScopedTenantBackgroundService
+public class SampleBackgroundScopedService : TenantBackgroundScopedService
 {
     private readonly ShellSettings _shellSettings;
     private readonly ISiteService _siteService;
     private readonly ISampleScopedService _sampleScopedService;
-    private readonly ILogger<SampleScopedBackgroundService> _logger;
+    private readonly ILogger<SampleBackgroundScopedService> _logger;
 
-    public SampleScopedBackgroundService(
+    public SampleBackgroundScopedService(
         ShellSettings shellSettings,
         ISiteService siteService,
         ISampleScopedService sampleScopedService,
-        ILogger<SampleScopedBackgroundService> logger)
+        ILogger<SampleBackgroundScopedService> logger)
     {
         _shellSettings = shellSettings;
         _siteService = siteService;
