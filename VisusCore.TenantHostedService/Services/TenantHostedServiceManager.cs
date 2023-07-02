@@ -68,7 +68,7 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
 
         var stoppingTask = stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
 
-        await WaitTasksToBeCompletedOrStopAsync(scopedTasks, stoppingTask);
+        await scopedTasks.WaitTasksUntilStopAsync(stoppingTask);
 
         await stoppingToken.WaitAsync(Timeout.InfiniteTimeSpan);
 
@@ -331,15 +331,6 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
 
             throw;
         }
-    }
-
-    private static async Task WaitTasksToBeCompletedOrStopAsync(IList<Task> tasks, Task stoppingTask)
-    {
-        do
-        {
-            await Task.WhenAny(tasks.Concat(new[] { stoppingTask }));
-        }
-        while (!stoppingTask.IsCompleted && tasks.Any(task => !task.IsCompleted));
     }
 
     private static async Task WaitScopedHostedServiceTasksToBeCompletedOrStopAsync(
