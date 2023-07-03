@@ -9,14 +9,14 @@ namespace VisusCore.TenantHostedService.Samples.Services;
 public class SampleScopedService : ISampleScopedService, IDisposable
 {
     private readonly ILogger _logger;
-    private bool _isDisposed;
+    private bool _disposed;
 
     public SampleScopedService(ILogger<SampleScopedService> logger) =>
         _logger = logger;
 
     public async Task DoSomethingAsync(CancellationToken cancellationToken = default)
     {
-        if (_isDisposed) throw new ObjectDisposedException(nameof(SampleScopedService));
+        if (_disposed) throw new ObjectDisposedException(nameof(SampleScopedService));
 
         await cancellationToken.WaitAsync(TimeSpan.FromSeconds(1));
 
@@ -25,9 +25,9 @@ public class SampleScopedService : ISampleScopedService, IDisposable
 
     protected virtual void Dispose(bool disposing)
     {
-        if (!_isDisposed)
+        if (!_disposed)
         {
-            _isDisposed = true;
+            _disposed = true;
         }
     }
 

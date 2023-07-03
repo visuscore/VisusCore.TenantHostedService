@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using System;
 using VisusCore.TenantHostedService.Abstractions.Services;
+using VisusCore.TenantHostedService.Core.Services;
 
 namespace VisusCore.TenantHostedService.Core.Extensions;
 
@@ -11,16 +11,9 @@ public static class ServiceCollectionExtensions
         where TTenantHostedService : class, ITenantHostedService
     {
         services.TryAddEnumerable(ServiceDescriptor.Singleton<ITenantHostedService, TTenantHostedService>());
-
-        return services;
-    }
-
-    public static IServiceCollection AddTenantHostedService<THostedService>(
-        this IServiceCollection services,
-        Func<IServiceProvider, THostedService> implementationFactory)
-        where THostedService : class, ITenantHostedService
-    {
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<ITenantHostedService>(implementationFactory));
+        services.AddScoped<
+            ITenantHostedServiceAccessor<TTenantHostedService>,
+            TenantHostedServiceAccessor<TTenantHostedService>>();
 
         return services;
     }
@@ -29,16 +22,9 @@ public static class ServiceCollectionExtensions
         where TTenantHostedService : class, ITenantHostedScopedService
     {
         services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantHostedScopedService, TTenantHostedService>());
-
-        return services;
-    }
-
-    public static IServiceCollection AddTenantHostedScopedService<THostedService>(
-        this IServiceCollection services,
-        Func<IServiceProvider, THostedService> implementationFactory)
-        where THostedService : class, ITenantHostedScopedService
-    {
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<ITenantHostedScopedService>(implementationFactory));
+        services.AddScoped<
+            ITenantHostedScopedServiceAccessor<TTenantHostedService>,
+            TenantHostedScopedServiceAccessor<TTenantHostedService>>();
 
         return services;
     }

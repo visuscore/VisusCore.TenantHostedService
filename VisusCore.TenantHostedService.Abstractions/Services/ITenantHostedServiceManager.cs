@@ -29,4 +29,18 @@ public interface ITenantHostedServiceManager
     /// Synchronize the loaded services with the dependency container.
     /// </summary>
     Task UpdateServicesAsync();
+
+    /// <summary>
+    /// Returns the hosted service of the given type.
+    /// </summary>
+    /// <typeparam name="TTenantHostedService">Service type.</typeparam>
+    TTenantHostedService GetHostedService<TTenantHostedService>()
+        where TTenantHostedService : class, ITenantHostedService;
+
+    /// <summary>
+    /// Returns the hosted scoped service of the given type.
+    /// </summary>
+    /// <typeparam name="TTenantHostedScopedService">Service type.</typeparam>
+    TTenantHostedScopedService GetHostedScopedService<TTenantHostedScopedService>()
+        where TTenantHostedScopedService : class, ITenantHostedScopedService;
 }

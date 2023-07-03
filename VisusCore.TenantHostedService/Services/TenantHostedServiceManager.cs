@@ -210,6 +210,20 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
                         shellContext.Settings.Name);
                 }
             }
+            else if (hostedService is IAsyncDisposable asyncDisposable)
+            {
+                try
+                {
+                    await asyncDisposable.DisposeAsync();
+                }
+                catch (Exception exception) when (!exception.IsFatal())
+                {
+                    _logger.LogError(
+                        exception,
+                        "Error while disposing the hosted service on tenant '{TenantName}'.",
+                        shellContext.Settings.Name);
+                }
+            }
 
             shellLoadedServices.TryRemove(hostedService, out _);
         }
@@ -388,6 +402,36 @@ public sealed class TenantHostedServiceManager : BackgroundService, ITenantHoste
         StartHostedServicesInShellContextAsync(
             ShellScope.Current.ShellContext,
             _httpContextAccessor.HttpContext.RequestAborted);
+
+    TTenantHostedService ITenantHostedServiceManager.GetHostedService<TTenantHostedService>()
+    {
+        if (!_loadedServices.TryGetValue(ShellScope.Current.ShellContext.Settings.Name, out var loadedServices))
+        {
+            throw new InvalidOperationException(
+                $"The tenant '{ShellScope.Current.ShellContext.Settings.Name}' is not loaded by {nameof(TenantHostedServiceManager)}.");
+        }
+
+        var service = loadedServices.Keys.FirstOrDefault(instance => instance is TTenantHostedService) as TTenantHostedService
+            ?? throw new InvalidOperationException(
+                $"The hosted service of type '{typeof(TTenantHostedService).FullName}' is not loaded.");
+
+        return service;
+    }
+
+    TTenantHostedScopedService ITenantHostedServiceManager.GetHostedScopedService<TTenantHostedScopedService>()
+    {
+        if (!_loadedScopedServices.TryGetValue(ShellScope.Current.ShellContext.Settings.Name, out var loadedServices))
+        {
+            throw new InvalidOperationException(
+                $"The tenant '{ShellScope.Current.ShellContext.Settings.Name}' is not loaded by {nameof(TenantHostedServiceManager)}.");
+        }
+
+        var service = loadedServices.Keys.FirstOrDefault(instance => instance is TTenantHostedScopedService) as TTenantHostedScopedService
+            ?? throw new InvalidOperationException(
+                $"The hosted scoped service of type '{typeof(TTenantHostedScopedService).FullName}' is not loaded.");
+
+        return service;
+    }
 
     #endregion
 }
