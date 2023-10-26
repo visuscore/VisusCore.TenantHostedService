@@ -18,6 +18,11 @@ public class TenantHostedServiceAdminMenu : INavigationProvider
 
     public Task BuildNavigationAsync(string name, NavigationBuilder builder)
     {
+        if (builder is null)
+        {
+            throw new ArgumentNullException(nameof(builder));
+        }
+
         if (!string.Equals(name, "admin", StringComparison.OrdinalIgnoreCase))
         {
             return Task.CompletedTask;

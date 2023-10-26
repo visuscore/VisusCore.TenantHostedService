@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OrchardCore.Environment.Shell.Descriptor.Models;
+using System;
 using System.Linq;
 using VisusCore.TenantHostedService.Abstractions.Services;
 using VisusCore.TenantHostedService.Constants;
@@ -12,6 +13,11 @@ public static class OrchardCoreBuilderExtensions
 {
     public static OrchardCoreBuilder AddTenantHostedService(this OrchardCoreBuilder builder)
     {
+        if (builder is null)
+        {
+            throw new ArgumentNullException(nameof(builder));
+        }
+
         builder.ApplicationServices.AddHostedService<TenantHostedServiceManager>()
             .AddSingleton<ITenantHostedServiceManager>(services =>
                 services.GetServices<IHostedService>().First(

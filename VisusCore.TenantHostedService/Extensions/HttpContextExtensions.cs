@@ -7,6 +7,11 @@ public static class HttpContextExtensions
 {
     public static void SetBaseUrl(this HttpContext context, string baseUrl)
     {
+        if (context is null)
+        {
+            throw new ArgumentNullException(nameof(context));
+        }
+
         if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
         {
             context.Request.Scheme = uri.Scheme;

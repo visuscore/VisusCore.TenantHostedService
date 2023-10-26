@@ -9,7 +9,14 @@ public static class TenantHostedServiceManagerExtensions
 {
     public static ITenantHostedServiceStatus GetStatusByTypeName(
         this ITenantHostedServiceManager serviceManager,
-        string typeName) =>
-        serviceManager.GetLoadedServices()
+        string typeName)
+    {
+        if (serviceManager is null)
+        {
+            throw new ArgumentNullException(nameof(serviceManager));
+        }
+
+        return serviceManager.GetLoadedServices()
             .First(status => status.ImplementationType.FullName.Equals(typeName, StringComparison.OrdinalIgnoreCase));
+    }
 }
